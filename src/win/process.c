@@ -38,6 +38,16 @@
 
 #define SIGKILL         9
 
+#ifndef PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE
+#define PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE \
+  ProcThreadAttributeValue(22, FALSE, TRUE, FALSE)
+#endif
+
+typedef VOID* HPCON;
+typedef HRESULT (__stdcall *PFNCREATEPSEUDOCONSOLE)(COORD c, HANDLE hIn, HANDLE hOut, DWORD dwFlags, HPCON* phpcon);
+typedef HRESULT (__stdcall *PFNRESIZEPSEUDOCONSOLE)(HPCON hpc, COORD newSize);
+typedef HRESULT (__stdcall *PFNCLEARPSEUDOCONSOLE)(HPCON hpc);
+typedef void (__stdcall *PFNCLOSEPSEUDOCONSOLE)(HPCON hpc);
 
 typedef struct env_var {
   const WCHAR* const wide;
@@ -896,7 +906,8 @@ int uv_spawn(uv_loop_t* loop,
   BOOL result;
   WCHAR* application_path = NULL, *application = NULL, *arguments = NULL,
          *env = NULL, *cwd = NULL;
-  STARTUPINFOW startup;
+  STARTUPINFOEXW startupex;
+  ZeroMemory(&startupex, sizeof(startupex));
   PROCESS_INFORMATION info;
   DWORD process_flags;
   BYTE* child_stdio_buffer;
@@ -914,6 +925,8 @@ int uv_spawn(uv_loop_t* loop,
     return UV_EINVAL;
   }
 
+  // TODO: Validate stdio[0] and [1] when PTY requested.
+
   assert(options->file != NULL);
   assert(!(options->flags & ~(UV_PROCESS_DETACHED |
                               UV_PROCESS_SETGID |
@@ -922,7 +935,8 @@ int uv_spawn(uv_loop_t* loop,
                               UV_PROCESS_WINDOWS_HIDE |
                               UV_PROCESS_WINDOWS_HIDE_CONSOLE |
                               UV_PROCESS_WINDOWS_HIDE_GUI |
-                              UV_PROCESS_WINDOWS_VERBATIM_ARGUMENTS)));
+                              UV_PROCESS_WINDOWS_VERBATIM_ARGUMENTS |
+                              UV_PROCESS_PTY)));
 
   err = uv__utf8_to_utf16_alloc(options->file, &application);
   if (err)
@@ -1006,18 +1020,78 @@ int uv_spawn(uv_loop_t* loop,
     goto done;
   }
 
-  startup.cb = sizeof(startup);
-  startup.lpReserved = NULL;
-  startup.lpDesktop = NULL;
-  startup.lpTitle = NULL;
-  startup.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+  startupex.StartupInfo.cb = sizeof(startupex.StartupInfo);
+  startupex.StartupInfo.lpReserved = NULL;
+  startupex.StartupInfo.lpDesktop = NULL;
+  startupex.StartupInfo.lpTitle = NULL;
+  startupex.StartupInfo.dwFlags = STARTF_USESHOWWINDOW;
 
-  startup.cbReserved2 = uv__stdio_size(child_stdio_buffer);
-  startup.lpReserved2 = (BYTE*) child_stdio_buffer;
+  void *pty;
 
-  startup.hStdInput = uv__stdio_handle(child_stdio_buffer, 0);
-  startup.hStdOutput = uv__stdio_handle(child_stdio_buffer, 1);
-  startup.hStdError = uv__stdio_handle(child_stdio_buffer, 2);
+  if (options->flags & UV_PROCESS_PTY) {
+    uv_pipe_t* in_write_pipe = (uv_pipe_t*) options->stdio[0].data.stream;
+    HANDLE in_read = INVALID_HANDLE_VALUE;
+    assert(options->stdio[0].data.stream->type == UV_NAMED_PIPE);
+    assert(!(options->stdio[0].data.stream->flags & UV_HANDLE_CONNECTION));
+    assert(!(options->stdio[0].data.stream->flags & UV_HANDLE_PIPESERVER));
+    err = uv__create_stdio_pipe_pair(loop,
+                                     in_write_pipe,
+                                     &in_read,
+                                     options->stdio[0].flags);
+    if (err)
+      goto done;
+
+    uv_pipe_t* out_read_pipe = (uv_pipe_t*) options->stdio[1].data.stream;
+    HANDLE out_write = INVALID_HANDLE_VALUE;
+    assert(options->stdio[1].data.stream->type == UV_NAMED_PIPE);
+    assert(!(options->stdio[1].data.stream->flags & UV_HANDLE_CONNECTION));
+    assert(!(options->stdio[1].data.stream->flags & UV_HANDLE_PIPESERVER));
+    err = uv__create_stdio_pipe_pair(loop,
+                                     out_read_pipe,
+                                     &out_write,
+                                     options->stdio[1].flags);
+    if (err)
+      goto done;
+
+    HANDLE hLibrary = LoadLibraryExW(L"kernel32.dll", 0, 0);
+    if (hLibrary == NULL) // TODO
+        return GetLastError();
+
+    PFNCREATEPSEUDOCONSOLE pfnCreate = (PFNCREATEPSEUDOCONSOLE)GetProcAddress((HMODULE)hLibrary,"CreatePseudoConsole");
+    if (!pfnCreate) {
+      err = GetLastError();
+      goto done;
+      // TODO
+      // errno = GetLastError();
+      // error_str = MVM_malloc(128);
+      // snprintf(error_str, 127, "Error loading kernel32.dll: (error code %i)",
+      //        errno);
+      // return error_str;
+    }
+
+    // TODO: Surface this option.
+    COORD size = {80, 24};
+
+    HRESULT hr = pfnCreate(size, &in_read, &out_write, 0, &pty);
+    if (FAILED(hr)) {
+      err = GetLastError();
+      goto done;
+      // errno = GetLastError();
+      // error_str = MVM_malloc(128);
+      // snprintf(error_str, 127, "Failed to create PTY device: (error code %i)",
+      //          errno);
+      // return error_str;
+    }
+  }
+  else {
+    startupex.StartupInfo.dwFlags = startupex.StartupInfo.dwFlags | STARTF_USESTDHANDLES;
+    startupex.StartupInfo.hStdInput = uv__stdio_handle(child_stdio_buffer, 0);
+    startupex.StartupInfo.hStdOutput = uv__stdio_handle(child_stdio_buffer, 1);
+    startupex.StartupInfo.hStdError = uv__stdio_handle(child_stdio_buffer, 2);
+  }
+
+  startupex.StartupInfo.cbReserved2 = uv__stdio_size(child_stdio_buffer);
+  startupex.StartupInfo.lpReserved2 = (BYTE*) child_stdio_buffer;
 
   process_flags = CREATE_UNICODE_ENVIRONMENT;
 
@@ -1034,9 +1108,9 @@ int uv_spawn(uv_loop_t* loop,
   if ((options->flags & UV_PROCESS_WINDOWS_HIDE_GUI) ||
       (options->flags & UV_PROCESS_WINDOWS_HIDE)) {
     /* Use SW_HIDE to avoid any potential process window. */
-    startup.wShowWindow = SW_HIDE;
+    startupex.StartupInfo.wShowWindow = SW_HIDE;
   } else {
-    startup.wShowWindow = SW_SHOWDEFAULT;
+    startupex.StartupInfo.wShowWindow = SW_SHOWDEFAULT;
   }
 
   if (options->flags & UV_PROCESS_DETACHED) {
@@ -1054,6 +1128,38 @@ int uv_spawn(uv_loop_t* loop,
     process_flags |= CREATE_SUSPENDED;
   }
 
+  if (options->flags & UV_PROCESS_PTY) {
+    process_flags |= EXTENDED_STARTUPINFO_PRESENT;
+    size_t attr_list_size;
+    InitializeProcThreadAttributeList(NULL, 1, 0, &attr_list_size);
+    startupex.lpAttributeList = uv__malloc(attr_list_size);
+
+    if (!InitializeProcThreadAttributeList(startupex.lpAttributeList, 1, 0, &attr_list_size)) {
+      err = GetLastError();
+      goto done;
+      // errno = GetLastError();
+      // MVM_free(startupex.lpAttributeList);
+      // error_str = MVM_malloc(128);
+      // snprintf(error_str, 127, "Failed to init proc thread attribute list. (error code %i)", errno);
+      // return error_str;
+    }
+
+    if (!UpdateProcThreadAttribute(startupex.lpAttributeList,
+                                   0,
+                                   PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
+                                   pty,
+                                   sizeof(pty),
+                                   NULL,
+                                   NULL)) {
+      err = GetLastError();
+      goto done;
+      // MVM_free(si.lpAttributeList);
+      // error_str = MVM_malloc(128);
+      // snprintf(error_str, 127, "Failed to update proc thread attribute list. (error code %i)", errno);
+      // return error_str;
+    }
+  }
+
   if (!CreateProcessW(application_path,
                      arguments,
                      NULL,
@@ -1062,7 +1168,7 @@ int uv_spawn(uv_loop_t* loop,
                      process_flags,
                      env,
                      cwd,
-                     &startup,
+                     &startupex.StartupInfo,
                      &info)) {
     /* CreateProcessW failed. */
     err = GetLastError();

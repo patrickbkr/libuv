@@ -1148,7 +1148,16 @@ enum uv_process_flags {
    * search for the exact file name before trying variants with
    * extensions like '.exe' or '.cmd'.
    */
-  UV_PROCESS_WINDOWS_FILE_PATH_EXACT_NAME = (1 << 7)
+  UV_PROCESS_WINDOWS_FILE_PATH_EXACT_NAME = (1 << 7),
+  /*
+   * Start subprocess with a pseudo terminal. To use this flag, set
+   * stdio[0] to UV_CREATE_PIPE | UV_READABLE_PIPE and
+   * stdio[1] to UV_CREATE_PIPE | UV_WRITABLE_PIPE and
+   * stdio[2] to UV_IGNORE. The first pipe will be the PTY in (write here),
+   * while the second pipe will be the PTY out (read here). The child will have
+   * all standard FDs (0, 1 and 2) connected to the PTY as it should.
+   */
+  UV_PROCESS_PTY = (1 << 8)
 };
 
 /*
