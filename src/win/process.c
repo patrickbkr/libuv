@@ -1006,10 +1006,6 @@ int uv_spawn(uv_loop_t* loop,
     }
   }
 
-  err = uv__stdio_create(loop, options, &child_stdio_buffer);
-  if (err)
-    goto done;
-
   application_path = search_path(application,
                                  cwd,
                                  path,
@@ -1020,15 +1016,17 @@ int uv_spawn(uv_loop_t* loop,
     goto done;
   }
 
-  startupex.StartupInfo.cb = sizeof(startupex.StartupInfo);
+  startupex.StartupInfo.cb = sizeof(startupex);
   startupex.StartupInfo.lpReserved = NULL;
   startupex.StartupInfo.lpDesktop = NULL;
   startupex.StartupInfo.lpTitle = NULL;
-  startupex.StartupInfo.dwFlags = STARTF_USESHOWWINDOW;
+  startupex.StartupInfo.dwFlags = STARTF_USESHOWWINDOW | STARTF_USESTDHANDLES;
 
   void *pty;
+  BOOL inherit_handles = TRUE;
 
   if (options->flags & UV_PROCESS_PTY) {
+    inherit_handles = FALSE;
     uv_pipe_t* in_write_pipe = (uv_pipe_t*) options->stdio[0].data.stream;
     HANDLE in_read = INVALID_HANDLE_VALUE;
     assert(options->stdio[0].data.stream->type == UV_NAMED_PIPE);
@@ -1072,7 +1070,7 @@ int uv_spawn(uv_loop_t* loop,
     // TODO: Surface this option.
     COORD size = {80, 24};
 
-    HRESULT hr = pfnCreate(size, &in_read, &out_write, 0, &pty);
+    HRESULT hr = pfnCreate(size, in_read, out_write, 0, &pty);
     if (FAILED(hr)) {
       err = GetLastError();
       goto done;
@@ -1082,16 +1080,22 @@ int uv_spawn(uv_loop_t* loop,
       //          errno);
       // return error_str;
     }
+    startupex.StartupInfo.hStdInput = NULL;
+    startupex.StartupInfo.hStdOutput = NULL;
+    startupex.StartupInfo.hStdError = NULL;
   }
   else {
-    startupex.StartupInfo.dwFlags = startupex.StartupInfo.dwFlags | STARTF_USESTDHANDLES;
+    err = uv__stdio_create(loop, options, &child_stdio_buffer);
+    if (err)
+      goto done;
+
     startupex.StartupInfo.hStdInput = uv__stdio_handle(child_stdio_buffer, 0);
     startupex.StartupInfo.hStdOutput = uv__stdio_handle(child_stdio_buffer, 1);
     startupex.StartupInfo.hStdError = uv__stdio_handle(child_stdio_buffer, 2);
+    startupex.StartupInfo.cbReserved2 = uv__stdio_size(child_stdio_buffer);
+    startupex.StartupInfo.lpReserved2 = (BYTE*) child_stdio_buffer;
   }
 
-  startupex.StartupInfo.cbReserved2 = uv__stdio_size(child_stdio_buffer);
-  startupex.StartupInfo.lpReserved2 = (BYTE*) child_stdio_buffer;
 
   process_flags = CREATE_UNICODE_ENVIRONMENT;
 
@@ -1164,7 +1168,7 @@ int uv_spawn(uv_loop_t* loop,
                      arguments,
                      NULL,
                      NULL,
-                     1,
+                     inherit_handles,
                      process_flags,
                      env,
                      cwd,
