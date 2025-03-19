@@ -1020,11 +1020,11 @@ int uv_spawn(uv_loop_t* loop,
   startupex.StartupInfo.lpReserved = NULL;
   startupex.StartupInfo.lpDesktop = NULL;
   startupex.StartupInfo.lpTitle = NULL;
-  startupex.StartupInfo.dwFlags = STARTF_USESHOWWINDOW | STARTF_USESTDHANDLES;
+  startupex.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
 
-  void *pty;
+  HPCON pty;
   BOOL inherit_handles = TRUE;
-
+  uv_pipe_t* out_read_pipe;
   if (options->flags & UV_PROCESS_PTY) {
     inherit_handles = FALSE;
     uv_pipe_t* in_write_pipe = (uv_pipe_t*) options->stdio[0].data.stream;
@@ -1039,7 +1039,7 @@ int uv_spawn(uv_loop_t* loop,
     if (err)
       goto done;
 
-    uv_pipe_t* out_read_pipe = (uv_pipe_t*) options->stdio[1].data.stream;
+    out_read_pipe = (uv_pipe_t*) options->stdio[1].data.stream;
     HANDLE out_write = INVALID_HANDLE_VALUE;
     assert(options->stdio[1].data.stream->type == UV_NAMED_PIPE);
     assert(!(options->stdio[1].data.stream->flags & UV_HANDLE_CONNECTION));
@@ -1105,16 +1105,16 @@ int uv_spawn(uv_loop_t* loop,
     for (i = 0; i < options->stdio_count; i++) {
       if (options->stdio[i].flags & UV_INHERIT_FD)
         break;
-      if (i == options->stdio_count - 1)
-        process_flags |= CREATE_NO_WINDOW;
+      // if (i == options->stdio_count - 1)
+        // process_flags |= CREATE_NO_WINDOW;
     }
   }
   if ((options->flags & UV_PROCESS_WINDOWS_HIDE_GUI) ||
       (options->flags & UV_PROCESS_WINDOWS_HIDE)) {
     /* Use SW_HIDE to avoid any potential process window. */
-    startupex.StartupInfo.wShowWindow = SW_HIDE;
+    // startupex.StartupInfo.wShowWindow = SW_HIDE;
   } else {
-    startupex.StartupInfo.wShowWindow = SW_SHOWDEFAULT;
+    // startupex.StartupInfo.wShowWindow = SW_SHOWDEFAULT;
   }
 
   if (options->flags & UV_PROCESS_DETACHED) {
@@ -1128,8 +1128,8 @@ int uv_spawn(uv_loop_t* loop,
      * CreateProcess call fail if we're under job control that doesn't allow
      * breakaway.
      */
-    process_flags |= DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP;
-    process_flags |= CREATE_SUSPENDED;
+    // process_flags |= DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP;
+    // process_flags |= CREATE_SUSPENDED;
   }
 
   if (options->flags & UV_PROCESS_PTY) {
@@ -1152,7 +1152,7 @@ int uv_spawn(uv_loop_t* loop,
                                    0,
                                    PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
                                    pty,
-                                   sizeof(pty),
+                                   sizeof(HPCON),
                                    NULL,
                                    NULL)) {
       err = GetLastError();
@@ -1164,14 +1164,14 @@ int uv_spawn(uv_loop_t* loop,
     }
   }
 
-  if (!CreateProcessW(application_path,
+  if (!CreateProcessW(NULL,
                      arguments,
                      NULL,
                      NULL,
                      inherit_handles,
                      process_flags,
-                     env,
-                     cwd,
+                     NULL,
+                     NULL,
                      &startupex.StartupInfo,
                      &info)) {
     /* CreateProcessW failed. */
@@ -1240,6 +1240,30 @@ int uv_spawn(uv_loop_t* loop,
   /* Make the handle active. It will remain active until the exit callback is
    * made or the handle is closed, whichever happens first. */
   uv__handle_start(process);
+  
+
+
+    DWORD BUFF_SIZE{ 512 };
+    char szBuffer[BUFF_SIZE];
+
+    DWORD dwBytesWritten;
+    DWORD dwBytesRead;
+    BOOL fRead = FALSE;
+    do
+    {
+        // Read from the pipe
+        fRead = ReadFile(hPipe, szBuffer, BUFF_SIZE, &dwBytesRead, NULL);
+
+        // Write received text to the Console
+        // Note: Write to the Console using WriteFile(hConsole...), not printf()/puts() to
+        // prevent partially-read VT sequences from corrupting output
+        WriteFile(hConsole, szBuffer, dwBytesRead, &dwBytesWritten, NULL);
+
+    } while (fRead && dwBytesRead >= 0);
+  
+  
+  
+  
 
   goto done_uv;
 
