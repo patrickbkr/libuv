@@ -896,6 +896,30 @@ void uv__process_endgame(uv_loop_t* loop, uv_process_t* handle) {
   uv__handle_close(handle);
 }
 
+int uv_pty_resize(uv_process_t* process,
+                  unsigned short cols,
+                  unsigned short rows) {
+  HANDLE hLibrary = LoadLibraryExW(L"kernel32.dll", 0, 0);
+  // Error loading kernel32.dll: (error code %i)
+  if (!hLibrary)
+    return uv_translate_sys_error(GetLastError());
+
+  PFNRESIZEPSEUDOCONSOLE pfnResize = (PFNRESIZEPSEUDOCONSOLE)GetProcAddress((HMODULE)hLibrary,"ResizePseudoConsole");
+  if (!pfnResize) {
+    int err = GetLastError();
+    if (err == ERROR_PROC_NOT_FOUND)
+      return UV_ENOTSUP;
+    else
+      return uv_translate_sys_error(err);
+  }
+
+  COORD size = {cols, rows};
+  HRESULT hr = pfnResize(process->pty_handle, size);
+    // Failed to resize PTY device: (error code %i)
+  if (FAILED(hr))
+    return uv_translate_sys_error(GetLastError());
+  return 0;
+}
 
 int uv_spawn(uv_loop_t* loop,
              uv_process_t* process,
@@ -1035,8 +1059,6 @@ int uv_spawn(uv_loop_t* loop,
   startupex.StartupInfo.lpTitle = NULL;
   startupex.StartupInfo.dwFlags = STARTF_USESHOWWINDOW | STARTF_USESTDHANDLES;
 
-  void *pty;
-
   err = uv__stdio_create(loop, options, &child_stdio_buffer);
   if (err)
     goto done;
@@ -1044,13 +1066,13 @@ int uv_spawn(uv_loop_t* loop,
   if (options->flags & UV_PROCESS_PTY) {
     HANDLE hLibrary = LoadLibraryExW(L"kernel32.dll", 0, 0);
     if (!hLibrary) {
+      // Error loading kernel32.dll: (error code %i)
       err = GetLastError();
       goto done;
     }
 
     PFNCREATEPSEUDOCONSOLE pfnCreate = (PFNCREATEPSEUDOCONSOLE)GetProcAddress((HMODULE)hLibrary,"CreatePseudoConsole");
     if (!pfnCreate) {
-      // Error loading kernel32.dll: (error code %i)
       err = GetLastError();
       if (err == ERROR_PROC_NOT_FOUND) {
         err = UV_ENOTSUP;
@@ -1081,7 +1103,7 @@ int uv_spawn(uv_loop_t* loop,
 
     COORD size = {options->pty_cols, options->pty_rows};
 
-    HRESULT hr = pfnCreate(size, in_read, out_write, 0, &pty);
+    HRESULT hr = pfnCreate(size, in_read, out_write, 0, &process->pty_handle);
     if (FAILED(hr)) {
       // Failed to create PTY device: (error code %i)
       err = GetLastError();
@@ -1151,8 +1173,8 @@ int uv_spawn(uv_loop_t* loop,
     if (!UpdateProcThreadAttribute(startupex.lpAttributeList,
                                    0,
                                    PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
-                                   pty,
-                                   sizeof(pty),
+                                   process->pty_handle,
+                                   sizeof(process->pty_handle),
                                    NULL,
                                    NULL)) {
       // Failed to update proc thread attribute list. (error code %i)
