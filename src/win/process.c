@@ -1025,6 +1025,10 @@ int uv_spawn(uv_loop_t* loop,
   void *pty;
   BOOL inherit_handles = TRUE;
 
+  err = uv__stdio_create(loop, options, &child_stdio_buffer);
+  if (err)
+    goto done;
+
   if (options->flags & UV_PROCESS_PTY) {
     inherit_handles = FALSE;
     uv_pipe_t* in_write_pipe = (uv_pipe_t*) options->stdio[0].data.stream;
@@ -1085,17 +1089,13 @@ int uv_spawn(uv_loop_t* loop,
     startupex.StartupInfo.hStdError = NULL;
   }
   else {
-    err = uv__stdio_create(loop, options, &child_stdio_buffer);
-    if (err)
-      goto done;
-
     startupex.StartupInfo.hStdInput = uv__stdio_handle(child_stdio_buffer, 0);
     startupex.StartupInfo.hStdOutput = uv__stdio_handle(child_stdio_buffer, 1);
     startupex.StartupInfo.hStdError = uv__stdio_handle(child_stdio_buffer, 2);
-    startupex.StartupInfo.cbReserved2 = uv__stdio_size(child_stdio_buffer);
-    startupex.StartupInfo.lpReserved2 = (BYTE*) child_stdio_buffer;
   }
 
+  startupex.StartupInfo.cbReserved2 = uv__stdio_size(child_stdio_buffer);
+  startupex.StartupInfo.lpReserved2 = (BYTE*) child_stdio_buffer;
 
   process_flags = CREATE_UNICODE_ENVIRONMENT;
 
