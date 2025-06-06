@@ -1079,8 +1079,7 @@ int uv_spawn(uv_loop_t* loop,
     if (err)
       goto done;
 
-    // TODO: Surface this option.
-    COORD size = {80, 24};
+    COORD size = {options->pty_cols, options->pty_rows};
 
     HRESULT hr = pfnCreate(size, in_read, out_write, 0, &pty);
     if (FAILED(hr)) {

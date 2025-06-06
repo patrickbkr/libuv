@@ -1087,6 +1087,12 @@ typedef struct uv_process_options_s {
   int stdio_count;
   uv_stdio_container_t* stdio;
   /*
+   * When starting the child with a PTY, these set the initial width and
+   * height.
+   */
+  unsigned int pty_cols;
+  unsigned int pty_rows;
+  /*
    * Libuv can change the child process' user/group id. This happens only when
    * the appropriate bits are set in the flags fields. This is not supported on
    * windows; uv_spawn() will fail and set the error to UV_ENOTSUP.
