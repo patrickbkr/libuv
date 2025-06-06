@@ -925,7 +925,20 @@ int uv_spawn(uv_loop_t* loop,
     return UV_EINVAL;
   }
 
-  // TODO: Validate stdio[0] and [1] when PTY requested.
+  if (options->flags & UV_PROCESS_PTY) {
+    if (options->stdio[0].data.stream->type != UV_NAMED_PIPE ||
+        options->stdio[0].data.stream->flags & UV_HANDLE_CONNECTION ||
+        options->stdio[0].data.stream->flags & UV_HANDLE_PIPESERVER ||
+        options->stdio[1].data.stream->type != UV_NAMED_PIPE ||
+        options->stdio[1].data.stream->flags & UV_HANDLE_CONNECTION ||
+        options->stdio[1].data.stream->flags & UV_HANDLE_PIPESERVER) {
+      return UV_EINVAL;
+    }
+    if (options->flags & (UV_PROCESS_WINDOWS_HIDE |
+                          UV_PROCESS_WINDOWS_HIDE_CONSOLE)) {
+      return UV_EINVAL;
+    }
+  }
 
   assert(options->file != NULL);
   assert(!(options->flags & ~(UV_PROCESS_DETACHED |
@@ -1023,19 +1036,33 @@ int uv_spawn(uv_loop_t* loop,
   startupex.StartupInfo.dwFlags = STARTF_USESHOWWINDOW | STARTF_USESTDHANDLES;
 
   void *pty;
-  BOOL inherit_handles = TRUE;
 
   err = uv__stdio_create(loop, options, &child_stdio_buffer);
   if (err)
     goto done;
 
   if (options->flags & UV_PROCESS_PTY) {
-    inherit_handles = FALSE;
+    HANDLE hLibrary = LoadLibraryExW(L"kernel32.dll", 0, 0);
+    if (!hLibrary) {
+      err = GetLastError();
+      goto done;
+    }
+
+    PFNCREATEPSEUDOCONSOLE pfnCreate = (PFNCREATEPSEUDOCONSOLE)GetProcAddress((HMODULE)hLibrary,"CreatePseudoConsole");
+    if (!pfnCreate) {
+      // Error loading kernel32.dll: (error code %i)
+      err = GetLastError();
+      if (err == ERROR_PROC_NOT_FOUND) {
+        err = UV_ENOTSUP;
+        goto done_uv;
+      }
+      else {
+        goto done;
+      }
+    }
+
     uv_pipe_t* in_write_pipe = (uv_pipe_t*) options->stdio[0].data.stream;
     HANDLE in_read = INVALID_HANDLE_VALUE;
-    assert(options->stdio[0].data.stream->type == UV_NAMED_PIPE);
-    assert(!(options->stdio[0].data.stream->flags & UV_HANDLE_CONNECTION));
-    assert(!(options->stdio[0].data.stream->flags & UV_HANDLE_PIPESERVER));
     err = uv__create_stdio_pipe_pair(loop,
                                      in_write_pipe,
                                      &in_read,
@@ -1045,9 +1072,6 @@ int uv_spawn(uv_loop_t* loop,
 
     uv_pipe_t* out_read_pipe = (uv_pipe_t*) options->stdio[1].data.stream;
     HANDLE out_write = INVALID_HANDLE_VALUE;
-    assert(options->stdio[1].data.stream->type == UV_NAMED_PIPE);
-    assert(!(options->stdio[1].data.stream->flags & UV_HANDLE_CONNECTION));
-    assert(!(options->stdio[1].data.stream->flags & UV_HANDLE_PIPESERVER));
     err = uv__create_stdio_pipe_pair(loop,
                                      out_read_pipe,
                                      &out_write,
@@ -1055,34 +1079,14 @@ int uv_spawn(uv_loop_t* loop,
     if (err)
       goto done;
 
-    HANDLE hLibrary = LoadLibraryExW(L"kernel32.dll", 0, 0);
-    if (hLibrary == NULL) // TODO
-        return GetLastError();
-
-    PFNCREATEPSEUDOCONSOLE pfnCreate = (PFNCREATEPSEUDOCONSOLE)GetProcAddress((HMODULE)hLibrary,"CreatePseudoConsole");
-    if (!pfnCreate) {
-      err = GetLastError();
-      goto done;
-      // TODO
-      // errno = GetLastError();
-      // error_str = MVM_malloc(128);
-      // snprintf(error_str, 127, "Error loading kernel32.dll: (error code %i)",
-      //        errno);
-      // return error_str;
-    }
-
     // TODO: Surface this option.
     COORD size = {80, 24};
 
     HRESULT hr = pfnCreate(size, in_read, out_write, 0, &pty);
     if (FAILED(hr)) {
+      // Failed to create PTY device: (error code %i)
       err = GetLastError();
       goto done;
-      // errno = GetLastError();
-      // error_str = MVM_malloc(128);
-      // snprintf(error_str, 127, "Failed to create PTY device: (error code %i)",
-      //          errno);
-      // return error_str;
     }
     startupex.StartupInfo.hStdInput = NULL;
     startupex.StartupInfo.hStdOutput = NULL;
@@ -1138,14 +1142,11 @@ int uv_spawn(uv_loop_t* loop,
     InitializeProcThreadAttributeList(NULL, 1, 0, &attr_list_size);
     startupex.lpAttributeList = uv__malloc(attr_list_size);
 
-    if (!InitializeProcThreadAttributeList(startupex.lpAttributeList, 1, 0, &attr_list_size)) {
+    if (!InitializeProcThreadAttributeList(startupex.lpAttributeList, 1, 0,
+                                           &attr_list_size)) {
+      // Failed to init proc thread attribute list. (error code %i)
       err = GetLastError();
       goto done;
-      // errno = GetLastError();
-      // MVM_free(startupex.lpAttributeList);
-      // error_str = MVM_malloc(128);
-      // snprintf(error_str, 127, "Failed to init proc thread attribute list. (error code %i)", errno);
-      // return error_str;
     }
 
     if (!UpdateProcThreadAttribute(startupex.lpAttributeList,
@@ -1155,12 +1156,9 @@ int uv_spawn(uv_loop_t* loop,
                                    sizeof(pty),
                                    NULL,
                                    NULL)) {
+      // Failed to update proc thread attribute list. (error code %i)
       err = GetLastError();
       goto done;
-      // MVM_free(si.lpAttributeList);
-      // error_str = MVM_malloc(128);
-      // snprintf(error_str, 127, "Failed to update proc thread attribute list. (error code %i)", errno);
-      // return error_str;
     }
   }
 
@@ -1168,7 +1166,7 @@ int uv_spawn(uv_loop_t* loop,
                      arguments,
                      NULL,
                      NULL,
-                     inherit_handles,
+                     TRUE,
                      process_flags,
                      env,
                      cwd,
@@ -1254,6 +1252,7 @@ int uv_spawn(uv_loop_t* loop,
   uv__free(cwd);
   uv__free(env);
   uv__free(alloc_path);
+  uv__free(startupex.lpAttributeList);
 
   if (child_stdio_buffer != NULL) {
     /* Clean up child stdio handles. */
