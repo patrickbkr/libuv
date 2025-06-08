@@ -145,6 +145,7 @@ static void uv__process_init(uv_loop_t* loop, uv_process_t* handle) {
   handle->wait_handle = INVALID_HANDLE_VALUE;
   handle->process_handle = INVALID_HANDLE_VALUE;
   handle->exit_cb_pending = 0;
+  handle->pty_handle = NULL;
 
   UV_REQ_INIT(&handle->exit_req, UV_PROCESS_EXIT);
   handle->exit_req.data = handle;
@@ -899,6 +900,8 @@ void uv__process_endgame(uv_loop_t* loop, uv_process_t* handle) {
 int uv_pty_resize(uv_process_t* process,
                   unsigned short cols,
                   unsigned short rows) {
+  if (process->pty_handle == NULL)
+    return UV_EINVAL;
   HANDLE hLibrary = LoadLibraryExW(L"kernel32.dll", 0, 0);
   // Error loading kernel32.dll: (error code %i)
   if (!hLibrary)
