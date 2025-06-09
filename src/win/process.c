@@ -953,18 +953,15 @@ int uv_spawn(uv_loop_t* loop,
   }
 
   if (options->flags & UV_PROCESS_PTY) {
-    if (options->stdio[0].data.stream->type != UV_NAMED_PIPE ||
-        options->stdio[0].data.stream->flags & UV_HANDLE_CONNECTION ||
-        options->stdio[0].data.stream->flags & UV_HANDLE_PIPESERVER ||
+    if (options->stdio[0].flags != (UV_CREATE_PIPE | UV_READABLE_PIPE) ||
+        options->stdio[0].data.stream->type != UV_NAMED_PIPE ||
+        options->stdio[1].flags != (UV_CREATE_PIPE | UV_WRITABLE_PIPE) ||
         options->stdio[1].data.stream->type != UV_NAMED_PIPE ||
-        options->stdio[1].data.stream->flags & UV_HANDLE_CONNECTION ||
-        options->stdio[1].data.stream->flags & UV_HANDLE_PIPESERVER) {
+        options->stdio[2].flags != UV_IGNORE)
       return UV_EINVAL;
-    }
     if (options->flags & (UV_PROCESS_WINDOWS_HIDE |
-                          UV_PROCESS_WINDOWS_HIDE_CONSOLE)) {
+                          UV_PROCESS_WINDOWS_HIDE_CONSOLE))
       return UV_EINVAL;
-    }
   }
 
   assert(options->file != NULL);
