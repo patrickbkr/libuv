@@ -2110,3 +2110,49 @@ TEST_IMPL(spawn_relative_path) {
   MAKE_VALGRIND_HAPPY(uv_default_loop());
   return 0;
 }
+
+TEST_IMPL(spawn_pty_setup_succeeds) {
+  int r;
+  uv_pipe_t in, out;
+  uv_write_t write_req;
+  uv_buf_t buf;
+  uv_stdio_container_t stdio[3];
+
+  char buffer[] = "hello from parent";
+
+  init_process_options("spawn_helper10", exit_cb);
+
+  uv_pipe_init(uv_default_loop(), &in, 0);
+  uv_pipe_init(uv_default_loop(), &out, 0);
+
+  options.flags |= UV_PROCESS_PTY;
+  options.stdio = stdio;
+  options.stdio[0].flags = UV_CREATE_PIPE | UV_READABLE_PIPE;
+  options.stdio[0].data.stream = (uv_stream_t*) &in;
+  options.stdio[1].flags = UV_CREATE_PIPE | UV_WRITABLE_PIPE;
+  options.stdio[1].data.stream = (uv_stream_t*) &out;
+  options.stdio[2].flags = UV_IGNORE;
+  options.stdio_count = 3;
+
+  r = uv_spawn(uv_default_loop(), &process, &options);
+  ASSERT_OK(r);
+
+  buf.base = buffer;
+  buf.len = sizeof(buffer);
+  r = uv_write(&write_req, (uv_stream_t*) &in, &buf, 1, write_cb);
+  ASSERT_OK(r);
+
+  r = uv_read_start((uv_stream_t*) &out, on_alloc, on_read);
+  ASSERT_OK(r);
+
+  r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
+  ASSERT_OK(r);
+
+  ASSERT_EQ(1, exit_cb_called);
+  ASSERT_EQ(3, close_cb_called); /* Once for process twice for the pipes. */
+  ASSERT_OK(strcmp("Is a TTY: true\nRead: hello from parent\n", output));
+
+  MAKE_VALGRIND_HAPPY(uv_default_loop());
+  return 0;
+}
+

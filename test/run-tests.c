@@ -245,6 +245,17 @@ static int maybe_run_test(int argc, char **argv) {
     spawn_stdin_stdout();
     return 1;
   }
+  if (strcmp(argv[1], "spawn_helper10") == 0) {
+    char buffer[256];
+    notify_parent_process();
+
+    ASSERT_PTR_EQ(buffer, fgets(buffer, sizeof(buffer) - 1, stdin));
+    buffer[sizeof(buffer) - 1] = '\0';
+    printf("Is a TTY: %s\nRead: %s\n", isatty(STDIN_FILENO) ? "true" : "false", buffer);
+
+    return 1;
+  }
+
 
 #ifndef _WIN32
   if (strcmp(argv[1], "spawn_helper_setuid_setgid") == 0) {
