@@ -1109,9 +1109,8 @@ int uv_spawn(uv_loop_t* loop,
     pipes[0][1] = fd_tty;
     pipes[1][1] = fd_tty;
     pipes[2][1] = fd_tty;
-
-    uv_pipe_open((uv_pipe_t *)(options->stdio[0].data.stream), process->pty_fd);
-    uv_pipe_open((uv_pipe_t *)(options->stdio[1].data.stream), process->pty_fd);
+    pipes[0][0] = process->pty_fd;
+    pipes[1][0] = process->pty_fd;
   }
 
 
@@ -1156,8 +1155,17 @@ int uv_spawn(uv_loop_t* loop,
     uv__handle_start(process);
   }
 
-  if (options->flags & UV_PROCESS_PTY)
-      err = uv__close(fd_tty);
+  // We could not special case this (do it as part of the below for loop) if it's ok for the pipe to be non-blocking.
+  // TODO: Validate this.
+  if (options->flags & UV_PROCESS_PTY) {
+    err = uv__close(fd_tty);
+
+    if ((err = uv_pipe_open((uv_pipe_t *)(options->stdio[0].data.stream), process->pty_fd)) != 0)
+        printf("uv_pipe_open 0 ret: %i\n", err);
+
+    if ((err = uv_pipe_open((uv_pipe_t *)(options->stdio[1].data.stream), process->pty_fd)) != 0)
+        printf("uv_pipe_open 1 ret: %i\n", err);
+  }
 
   for (i = (options->flags & UV_PROCESS_PTY) ? 3 : 0; i < options->stdio_count; i++) {
     err = uv__process_open_stream(options->stdio + i, pipes[i]);
