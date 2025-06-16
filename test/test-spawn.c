@@ -2160,7 +2160,7 @@ TEST_IMPL(spawn_pty_setup_succeeds) {
   ASSERT_OK(r);
 
   ASSERT_EQ(1, exit_cb_called);
-  // ASSERT_EQ(3, close_cb_called); /* Once for process twice for the pipes. */
+  ASSERT_EQ(3, close_cb_called); /* Once for process twice for the pipes. */
   printf("output is: %s", output);
   ASSERT_OK(strcmp("hello from parent\r\nIs a TTY: true\r\nRead: hello from parent\r\n\r\n", output));
 
