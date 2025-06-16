@@ -138,6 +138,15 @@ static void on_read(uv_stream_t* tcp, ssize_t nread, const uv_buf_t* buf) {
   }
 }
 
+static void on_pty_read(uv_stream_t* tcp, ssize_t nread, const uv_buf_t* buf) {
+  if (nread > 0) {
+    output_used += nread;
+  } else if (nread < 0) {
+    ASSERT_EQ(nread, UV_EIO);
+    uv_close((uv_handle_t*) tcp, close_cb);
+  }
+}
+
 
 static void on_read_once(uv_stream_t* tcp, ssize_t nread, const uv_buf_t* buf) {
   uv_read_stop(tcp);
@@ -2138,14 +2147,13 @@ TEST_IMPL(spawn_pty_setup_succeeds) {
   ASSERT_OK(r);
 
   buf.base = buffer;
-  buf.len = sizeof(buffer);
+  // We don't want to write the trailing \0
+  buf.len = sizeof(buffer) - 1;
 
-  // We don't need to close the handle in the callback, since it's the
-  // same FD as in out and that is closed in on_read.
-  r = uv_write(&write_req, (uv_stream_t*) &in, &buf, 1, NULL);
+  r = uv_write(&write_req, (uv_stream_t*) &in, &buf, 1, write_cb);
   ASSERT_OK(r);
 
-  r = uv_read_start((uv_stream_t*) &out, on_alloc, on_read);
+  r = uv_read_start((uv_stream_t*) &out, on_alloc, on_pty_read);
   ASSERT_OK(r);
 
   r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
@@ -2154,7 +2162,7 @@ TEST_IMPL(spawn_pty_setup_succeeds) {
   ASSERT_EQ(1, exit_cb_called);
   // ASSERT_EQ(3, close_cb_called); /* Once for process twice for the pipes. */
   printf("output is: %s", output);
-  ASSERT_OK(strcmp("Is a TTY: true\nRead: hello from parent\n", output));
+  ASSERT_OK(strcmp("hello from parent\r\nIs a TTY: true\r\nRead: hello from parent\r\n\r\n", output));
 
   MAKE_VALGRIND_HAPPY(uv_default_loop());
   return 0;
