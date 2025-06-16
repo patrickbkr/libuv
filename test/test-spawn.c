@@ -2122,6 +2122,7 @@ TEST_IMPL(spawn_relative_path) {
 
 TEST_IMPL(spawn_pty_setup_succeeds) {
   int r;
+  size_t i;
   uv_pipe_t in, out;
   uv_write_t write_req;
   uv_buf_t buf;
@@ -2160,8 +2161,17 @@ TEST_IMPL(spawn_pty_setup_succeeds) {
   ASSERT_OK(r);
 
   ASSERT_EQ(1, exit_cb_called);
-  // ASSERT_EQ(3, close_cb_called); /* Once for process twice for the pipes. */
-  printf("output is: %s", output);
+  //ASSERT_EQ(3, close_cb_called); /* Once for process twice for the pipes. */
+  // TODO: remove this debug cruft
+  char *want = "hello from parent\r\nIs a TTY: true\r\nRead: hello from parent\r\n\r\n";
+  printf("output is: %send\n", output);
+  printf("should is: %send\n", want);
+  for (i = 0; i < strlen(want); i++) {
+      if (output[i] != want[i])
+          printf("diff: %li, %i, %i\n", i, output[i], want[i]);
+  }
+      //printf("chars are: %i %i %i %i %i %i\n", output[16], output[17], output[18], output[19], output[20], output[21]);
+      //printf("shouldare: %i %i %i %i %i %i\n", want[16], want[17], want[18], want[19], want[20], want[21]);
   ASSERT_OK(strcmp("hello from parent\r\nIs a TTY: true\r\nRead: hello from parent\r\n\r\n", output));
 
   MAKE_VALGRIND_HAPPY(uv_default_loop());

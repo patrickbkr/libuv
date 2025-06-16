@@ -1110,10 +1110,13 @@ int uv_spawn(uv_loop_t* loop,
     pipes[1][1] = fd_tty;
     pipes[2][1] = fd_tty;
     pipes[0][0] = process->pty_fd;
+        printf("before dup\n");
     if ((pipes[1][0] = dup(process->pty_fd)) < 0) {
+        printf("HITTING DUP ERROR!%i\n", errno);
         err = UV__ERR(errno);
         goto error;
     }
+        printf("after dup, %i, %i\n", process->pty_fd, pipes[1][0]);
   }
 
 
