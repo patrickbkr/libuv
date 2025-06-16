@@ -251,7 +251,11 @@ static int maybe_run_test(int argc, char **argv) {
 
     ASSERT_PTR_EQ(buffer, fgets(buffer, sizeof(buffer) - 1, stdin));
     buffer[sizeof(buffer) - 1] = '\0';
+#ifdef _WIN32
+    printf("Is a TTY: %s\nRead: %s\n", _isatty(_fileno(stdin)) ? "true" : "false", buffer);
+#else
     printf("Is a TTY: %s\nRead: %s\n", isatty(STDIN_FILENO) ? "true" : "false", buffer);
+#endif
 
     return 1;
   }
