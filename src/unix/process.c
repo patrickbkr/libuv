@@ -1105,6 +1105,9 @@ int uv_spawn(uv_loop_t* loop,
   if (options->flags & UV_PROCESS_PTY) {
     if ((err = uv__spawn_make_pty(&process->pty_fd, &fd_tty, options->pty_cols, options->pty_rows)) != 0)
       goto error;
+    printf("PTY valid: %i\n", is_valid_fd(process->pty_fd));
+    printf("PTY FD: %i\n", process->pty_fd);
+    printf("TTY FD: %i\n", fd_tty);
 
     pipes[0][1] = fd_tty;
     pipes[1][1] = fd_tty;

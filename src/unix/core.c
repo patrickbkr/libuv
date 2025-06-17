@@ -442,12 +442,15 @@ int uv_run(uv_loop_t* loop, uv_run_mode mode) {
     uv__run_timers(loop);
   }
 
+    printf("PTY valid4: %i\n", is_valid_fd(13));
   while (r != 0 && loop->stop_flag == 0) {
     can_sleep =
         uv__queue_empty(&loop->pending_queue) &&
         uv__queue_empty(&loop->idle_handles);
 
+    printf("PTY valid5: %i\n", is_valid_fd(13));
     uv__run_pending(loop);
+    printf("PTY valid6: %i\n", is_valid_fd(13));
     uv__run_idle(loop);
     uv__run_prepare(loop);
 
@@ -850,8 +853,11 @@ static void uv__run_pending(uv_loop_t* loop) {
     q = uv__queue_head(&pq);
     uv__queue_remove(q);
     uv__queue_init(q);
+    printf("PTY valid51: %i\n", is_valid_fd(13));
     w = uv__queue_data(q, uv__io_t, pending_queue);
+    printf("PTY valid52: %i\n", is_valid_fd(13));
     w->cb(loop, w, POLLOUT);
+    printf("PTY valid53: %i\n", is_valid_fd(13));
   }
 }
 

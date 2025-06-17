@@ -1278,6 +1278,11 @@ static void uv__epoll_ctl_prep(int epollfd,
     uv__epoll_ctl_flush(epollfd, ctl, events);
 }
 
+int is_valid_fd(int fd)
+{
+  return fcntl(fd, F_GETFL) != -1 || errno != EBADF;
+}
+
 
 static void uv__epoll_ctl_flush(int epollfd,
                                 struct uv__iou* ctl,
@@ -1316,6 +1321,7 @@ static void uv__epoll_ctl_flush(int epollfd,
    * with EPOLL_CTL_MOD.
    */
   while (*ctl->cqhead != *ctl->cqtail) {
+  printf("start!\n");
     slot = (*ctl->cqhead)++ & ctl->cqmask;
 
     cqe = ctl->cqe;
@@ -1334,6 +1340,11 @@ static void uv__epoll_ctl_flush(int epollfd,
     if (op != EPOLL_CTL_ADD)
       abort();
 
+  printf("FD: %i\n", fd);
+    printf("PTY valid: %i\n", is_valid_fd(fd));
+  printf("OP: %i\n", op);
+  printf("RES: %i\n", cqe->res);
+  printf("BADF: %i\n", -EBADF);
     if (cqe->res != -EEXIST)
       abort();
 
@@ -1447,8 +1458,9 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
      * we enter epoll_pwait().
      */
     if (ctl->ringfd != -1)
-      while (*ctl->sqhead != *ctl->sqtail)
+      while (*ctl->sqhead != *ctl->sqtail) {
         uv__epoll_ctl_flush(epollfd, ctl, &prep);
+      }
 
     /* Only need to set the provider_entry_time if timeout != 0. The function
      * will return early if the loop isn't configured with UV_METRICS_IDLE_TIME.
