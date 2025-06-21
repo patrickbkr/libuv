@@ -2168,3 +2168,53 @@ TEST_IMPL(spawn_pty_setup_succeeds) {
   return 0;
 }
 
+TEST_IMPL(spawn_pty_stdio_greater_than_3) {
+  int r;
+  uv_pipe_t in, out, pipe4;
+  uv_write_t write_req;
+  uv_buf_t buf;
+  uv_stdio_container_t stdio[4];
+
+  char buffer[] = "hello from parent\n";
+
+  init_process_options("spawn_helper11", exit_cb);
+
+  uv_pipe_init(uv_default_loop(), &out, 0);
+  uv_pipe_init(uv_default_loop(), &in, 0);
+  uv_pipe_init(uv_default_loop(), &pipe4, 0);
+
+  options.flags |= UV_PROCESS_PTY;
+  options.stdio = stdio;
+  options.stdio[0].flags = UV_CREATE_PIPE | UV_READABLE_PIPE;
+  options.stdio[0].data.stream = (uv_stream_t*) &in;
+  options.stdio[1].flags = UV_CREATE_PIPE | UV_WRITABLE_PIPE;
+  options.stdio[1].data.stream = (uv_stream_t*) &out;
+  options.stdio[2].flags = UV_IGNORE;
+  options.stdio[3].flags = UV_CREATE_PIPE | UV_WRITABLE_PIPE;
+  options.stdio[3].data.stream = (uv_stream_t*) &pipe4;
+  options.stdio_count = 4;
+
+  r = uv_spawn(uv_default_loop(), &process, &options);
+  ASSERT_OK(r);
+
+  buf.base = buffer;
+  // We don't want to write the trailing \0
+  buf.len = sizeof(buffer) - 1;
+
+  r = uv_write(&write_req, (uv_stream_t*) &in, &buf, 1, write_cb);
+  ASSERT_OK(r);
+
+  r = uv_read_start((uv_stream_t*) &pipe4, on_alloc, on_read);
+  ASSERT_OK(r);
+
+  r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
+  ASSERT_OK(r);
+
+  ASSERT_EQ(1, exit_cb_called);
+  ASSERT_EQ(3, close_cb_called); /* Once for process twice for the pipes. */
+  printf("output is: %s", output);
+  ASSERT_OK(strcmp("Is a TTY: true\nRead: hello from parent\n\n", output));
+
+  MAKE_VALGRIND_HAPPY(uv_default_loop());
+  return 0;
+}

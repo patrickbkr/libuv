@@ -259,6 +259,30 @@ static int maybe_run_test(int argc, char **argv) {
 
     return 1;
   }
+  if (strcmp(argv[1], "spawn_helper11") == 0) {
+    char inbuffer[256];
+    char outbuffer[256];
+    notify_parent_process();
+
+    ASSERT_PTR_EQ(inbuffer, fgets(inbuffer, sizeof(inbuffer) - 1, stdin));
+    inbuffer[sizeof(inbuffer) - 1] = '\0';
+
+
+#ifdef _WIN32
+    snprintf(outbuffer, sizeof(outbuffer), "Is a TTY: %s\nRead: %s\n", _isatty(_fileno(stdin)) ? "true" : "false", inbuffer);
+    DWORD bytes;
+    WriteFile((HANDLE) _get_osfhandle(3), outbuffer, sizeof(outbuffer) - 1, &bytes, NULL);
+#else
+    snprintf(outbuffer, sizeof(outbuffer), "Is a TTY: %s\nRead: %s\n", isatty(STDIN_FILENO) ? "true" : "false", inbuffer);
+    ssize_t r;
+    do
+      r = write(3, outbuffer, sizeof(outbuffer) - 1);
+    while (r == -1 && errno == EINTR);
+    fsync(3);
+#endif
+
+    return 1;
+  }
 
 
 #ifndef _WIN32
