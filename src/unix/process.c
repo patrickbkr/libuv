@@ -1119,7 +1119,7 @@ int uv_spawn(uv_loop_t* loop,
         err = UV__ERR(errno);
         goto error;
     }
-        printf("after dup, %i, %i\n", process->pty_fd, pipes[1][0]);
+        printf("after dup, %i, %i\n", pipes[0][0], pipes[1][0]);
   }
 
 

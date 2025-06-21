@@ -63,7 +63,7 @@ int is_valid_fd2(int fd)
 }
 
 static void close_cb(uv_handle_t* handle) {
-    printf("PTY validclose: %i\n", is_valid_fd2(13));
+    printf("PTY validclose: %i %i\n", is_valid_fd2(12), is_valid_fd2(14));
   printf("close_cb\n");
   close_cb_called++;
 }
@@ -71,7 +71,7 @@ static void close_cb(uv_handle_t* handle) {
 static void exit_cb(uv_process_t* process,
                     int64_t exit_status,
                     int term_signal) {
-    printf("PTY validexit: %i\n", is_valid_fd2(13));
+    printf("PTY validexit: %i %i\n", is_valid_fd2(12), is_valid_fd2(14));
   printf("exit_cb\n");
   exit_cb_called++;
   ASSERT_EQ(1, exit_status);
@@ -83,7 +83,7 @@ static void exit_cb(uv_process_t* process,
 static void fail_cb(uv_process_t* process,
                     int64_t exit_status,
                     int term_signal) {
-    printf("PTY validfail: %i\n", is_valid_fd2(13));
+    printf("PTY validfail: %i %i\n", is_valid_fd2(12), is_valid_fd2(14));
   ASSERT(0 && "fail_cb called");
 }
 
@@ -92,7 +92,7 @@ static void kill_cb(uv_process_t* process,
                     int64_t exit_status,
                     int term_signal) {
   int err;
-    printf("PTY validkill: %i\n", is_valid_fd2(13));
+    printf("PTY validkill: %i %i\n", is_valid_fd2(12), is_valid_fd2(14));
 
   printf("exit_cb\n");
   exit_cb_called++;
@@ -125,7 +125,7 @@ static void kill_cb(uv_process_t* process,
 static void detach_failure_cb(uv_process_t* process,
                               int64_t exit_status,
                               int term_signal) {
-    printf("PTY validdetatch: %i\n", is_valid_fd2(13));
+    printf("PTY validdetach: %i %i\n", is_valid_fd2(12), is_valid_fd2(14));
   printf("detach_cb\n");
   exit_cb_called++;
 }
@@ -133,14 +133,14 @@ static void detach_failure_cb(uv_process_t* process,
 static void on_alloc(uv_handle_t* handle,
                      size_t suggested_size,
                      uv_buf_t* buf) {
-    printf("PTY validalloc: %i\n", is_valid_fd2(13));
+    printf("PTY validalloc: %i %i\n", is_valid_fd2(12), is_valid_fd2(14));
   buf->base = output + output_used;
   buf->len = OUTPUT_SIZE - output_used;
 }
 
 
 static void on_read(uv_stream_t* tcp, ssize_t nread, const uv_buf_t* buf) {
-    printf("PTY validread: %i\n", is_valid_fd2(13));
+    printf("PTY validread: %i %i\n", is_valid_fd2(12), is_valid_fd2(14));
   if (nread > 0) {
     output_used += nread;
   } else if (nread < 0) {
@@ -160,22 +160,22 @@ static void on_pty_read(uv_stream_t* tcp, ssize_t nread, const uv_buf_t* buf) {
 
 
 static void on_read_once(uv_stream_t* tcp, ssize_t nread, const uv_buf_t* buf) {
-    printf("PTY validreadonce: %i\n", is_valid_fd2(13));
+    printf("PTY validreadonce: %i %i\n", is_valid_fd2(12), is_valid_fd2(14));
   uv_read_stop(tcp);
   on_read(tcp, nread, buf);
 }
 
 
 static void write_cb(uv_write_t* req, int status) {
-    printf("PTY validwrite: %i\n", is_valid_fd2(13));
+    printf("PTY validwrite: %i %i\n", is_valid_fd2(12), is_valid_fd2(14));
   ASSERT_OK(status);
   uv_close((uv_handle_t*) req->handle, close_cb);
-    printf("PTY validwrite2: %i\n", is_valid_fd2(13));
+    printf("PTY validwrite2: %i %i\n", is_valid_fd2(12), is_valid_fd2(14));
 }
 
 
 static void write_null_cb(uv_write_t* req, int status) {
-    printf("PTY validwrite_null: %i\n", is_valid_fd2(13));
+    printf("PTY validwrite_null: %i %i\n", is_valid_fd2(12), is_valid_fd2(14));
   ASSERT_OK(status);
 }
 
@@ -2162,19 +2162,24 @@ TEST_IMPL(spawn_pty_setup_succeeds) {
   r = uv_spawn(uv_default_loop(), &process, &options);
   ASSERT_OK(r);
  
-    printf("PTY valid1: %i\n", is_valid_fd2(13));
+    printf("PTY valid1: %i %i\n", is_valid_fd2(12), is_valid_fd2(14));
+    int test_fd;
+    uv_fileno(&in, &test_fd);
+    printf("stdin (0): %i\n", test_fd);
+    uv_fileno(&out, &test_fd);
+    printf("stdout (1): %i\n", test_fd);
   buf.base = buffer;
   // We don't want to write the trailing \0
   buf.len = sizeof(buffer) - 1;
 
   r = uv_write(&write_req, (uv_stream_t*) &in, &buf, 1, write_cb);
   ASSERT_OK(r);
-    printf("PTY valid2: %i\n", is_valid_fd2(13));
+    printf("PTY valid2: %i %i\n", is_valid_fd2(12), is_valid_fd2(14));
 
   r = uv_read_start((uv_stream_t*) &out, on_alloc, on_pty_read);
   ASSERT_OK(r);
 
-    printf("PTY valid3: %i\n", is_valid_fd2(13));
+    printf("PTY valid3: %i %i\n", is_valid_fd2(12), is_valid_fd2(14));
   r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT_OK(r);
 
