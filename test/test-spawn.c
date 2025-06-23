@@ -2129,6 +2129,8 @@ TEST_IMPL(spawn_pty_setup_succeeds) {
 
   char buffer[] = "hello from parent\n";
 
+  printf("Begin PTY test\n");
+
   init_process_options("spawn_helper10", exit_cb);
 
   uv_pipe_init(uv_default_loop(), &in, 0);
@@ -2145,8 +2147,28 @@ TEST_IMPL(spawn_pty_setup_succeeds) {
   options.pty_rows = 24;
   options.stdio_count = 3;
 
+    HANDLE h = CreateFile("C:\\data\\repos\\MoarVM\\3rdparty\\libuv\\foo.txt",
+                          GENERIC_WRITE,
+                          0,                     // do not share 
+                          NULL,                  // default security 
+                          OPEN_ALWAYS,         // existing file only 
+                          FILE_ATTRIBUTE_NORMAL, // normal file 
+                          NULL);                 // no template
+    SetFilePointer(h, 0, NULL, FILE_END);
+    WriteFile(h, "before spawn\n", 13, NULL, NULL);
+    CloseHandle(h);
   r = uv_spawn(uv_default_loop(), &process, &options);
   ASSERT_OK(r);
+     h = CreateFile("C:\\data\\repos\\MoarVM\\3rdparty\\libuv\\foo.txt",
+                          GENERIC_WRITE,
+                          0,                     // do not share 
+                          NULL,                  // default security 
+                          OPEN_ALWAYS,         // existing file only 
+                          FILE_ATTRIBUTE_NORMAL, // normal file 
+                          NULL);                 // no template
+    SetFilePointer(h, 0, NULL, FILE_END);
+    WriteFile(h, "after spawn\n", 12, NULL, NULL);
+    CloseHandle(h);
 
   buf.base = buffer;
   // We don't want to write the trailing \0

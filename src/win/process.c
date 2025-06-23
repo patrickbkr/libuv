@@ -952,6 +952,7 @@ int uv_spawn(uv_loop_t* loop,
     return UV_EINVAL;
   }
 
+  printf("pre checks\n");
   if (options->flags & UV_PROCESS_PTY) {
     if (options->stdio[0].flags != (UV_CREATE_PIPE | UV_READABLE_PIPE) ||
         options->stdio[0].data.stream->type != UV_NAMED_PIPE ||
@@ -966,6 +967,7 @@ int uv_spawn(uv_loop_t* loop,
         options->pty_cols == 0)
       return UV_EINVAL;
   }
+  printf("post checks\n");
 
   assert(options->file != NULL);
   assert(!(options->flags & ~(UV_PROCESS_DETACHED |
@@ -1066,6 +1068,7 @@ int uv_spawn(uv_loop_t* loop,
   if (err)
     goto done;
 
+  printf("pre pty setup\n");
   if (options->flags & UV_PROCESS_PTY) {
     HANDLE hLibrary = LoadLibraryExW(L"kernel32.dll", 0, 0);
     if (!hLibrary) {
@@ -1074,6 +1077,7 @@ int uv_spawn(uv_loop_t* loop,
       goto done;
     }
 
+  printf("1\n");
     PFNCREATEPSEUDOCONSOLE pfnCreate = (PFNCREATEPSEUDOCONSOLE)GetProcAddress((HMODULE)hLibrary,"CreatePseudoConsole");
     if (!pfnCreate) {
       err = GetLastError();
@@ -1086,6 +1090,7 @@ int uv_spawn(uv_loop_t* loop,
       }
     }
 
+  printf("2\n");
     uv_pipe_t* in_write_pipe = (uv_pipe_t*) options->stdio[0].data.stream;
     HANDLE in_read = INVALID_HANDLE_VALUE;
     err = uv__create_stdio_pipe_pair(loop,
@@ -1095,6 +1100,7 @@ int uv_spawn(uv_loop_t* loop,
     if (err)
       goto done;
 
+  printf("3\n");
     uv_pipe_t* out_read_pipe = (uv_pipe_t*) options->stdio[1].data.stream;
     HANDLE out_write = INVALID_HANDLE_VALUE;
     err = uv__create_stdio_pipe_pair(loop,
@@ -1104,14 +1110,18 @@ int uv_spawn(uv_loop_t* loop,
     if (err)
       goto done;
 
+  printf("4: %i %i\n", options->pty_cols, options->pty_rows);
     COORD size = {options->pty_cols, options->pty_rows};
 
+  printf("5\n");
     HRESULT hr = pfnCreate(size, in_read, out_write, 0, &process->pty_handle);
     if (FAILED(hr)) {
       // Failed to create PTY device: (error code %i)
       err = hr;
+  printf("1: %#010x\n", err);
       goto done;
     }
+  printf("6\n");
     startupex.StartupInfo.hStdInput = NULL;
     startupex.StartupInfo.hStdOutput = NULL;
     startupex.StartupInfo.hStdError = NULL;
@@ -1121,6 +1131,8 @@ int uv_spawn(uv_loop_t* loop,
     startupex.StartupInfo.hStdOutput = uv__stdio_handle(child_stdio_buffer, 1);
     startupex.StartupInfo.hStdError = uv__stdio_handle(child_stdio_buffer, 2);
   }
+  
+  printf("post pty setup\n");
 
   startupex.StartupInfo.cbReserved2 = uv__stdio_size(child_stdio_buffer);
   startupex.StartupInfo.lpReserved2 = (BYTE*) child_stdio_buffer;
@@ -1160,6 +1172,7 @@ int uv_spawn(uv_loop_t* loop,
     process_flags |= CREATE_SUSPENDED;
   }
 
+  printf("pre pty attr info\n");
   if (options->flags & UV_PROCESS_PTY) {
     process_flags |= EXTENDED_STARTUPINFO_PRESENT;
     size_t attr_list_size;
@@ -1185,7 +1198,7 @@ int uv_spawn(uv_loop_t* loop,
       goto done;
     }
   }
-
+wprintf(L"Pre createprocess: %i %s %s\n", process_flags, application_path, arguments);
   if (!CreateProcessW(application_path,
                      arguments,
                      NULL,
@@ -1200,6 +1213,7 @@ int uv_spawn(uv_loop_t* loop,
     err = GetLastError();
     goto done;
   }
+  printf("Post createprocess\n");
 
   /* If the process isn't spawned as detached, assign to the global job object
    * so windows will kill it when the parent process dies. */

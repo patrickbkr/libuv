@@ -66,6 +66,18 @@ typedef BOOL (WINAPI *sCompareObjectHandles)(_In_ HANDLE, _In_ HANDLE);
 
 
 int main(int argc, char **argv) {
+    HANDLE h = CreateFile("C:\\data\\repos\\MoarVM\\3rdparty\\libuv\\foo.txt",
+                          GENERIC_WRITE,
+                          0,                     // do not share 
+                          NULL,                  // default security 
+                          OPEN_ALWAYS,         // existing file only 
+                          FILE_ATTRIBUTE_NORMAL, // normal file 
+                          NULL);                 // no template
+    SetFilePointer(h, 0, NULL, FILE_END);
+    WriteFile(h, "RUN_TESTS: ", 11, NULL, NULL);
+    WriteFile(h, argv[1], 15, NULL, NULL);
+    WriteFile(h, "\n", 1, NULL, NULL);
+    CloseHandle(h);
 #ifndef _WIN32
   if (0 == geteuid() && NULL == getenv("UV_RUN_AS_ROOT")) {
     fprintf(stderr, "The libuv test suite cannot be run as root.\n");
