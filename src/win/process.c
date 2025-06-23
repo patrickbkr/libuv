@@ -962,6 +962,9 @@ int uv_spawn(uv_loop_t* loop,
     if (options->flags & (UV_PROCESS_WINDOWS_HIDE |
                           UV_PROCESS_WINDOWS_HIDE_CONSOLE))
       return UV_EINVAL;
+    if (options->pty_rows == 0 |
+        options->pty_cols == 0)
+      return UV_EINVAL;
   }
 
   assert(options->file != NULL);
@@ -1106,7 +1109,7 @@ int uv_spawn(uv_loop_t* loop,
     HRESULT hr = pfnCreate(size, in_read, out_write, 0, &process->pty_handle);
     if (FAILED(hr)) {
       // Failed to create PTY device: (error code %i)
-      err = GetLastError();
+      err = hr;
       goto done;
     }
     startupex.StartupInfo.hStdInput = NULL;
@@ -1187,7 +1190,7 @@ int uv_spawn(uv_loop_t* loop,
                      arguments,
                      NULL,
                      NULL,
-                     TRUE,
+                     (options->flags & UV_PROCESS_PTY) ? FALSE : TRUE,
                      process_flags,
                      env,
                      cwd,

@@ -1061,6 +1061,9 @@ int uv_spawn(uv_loop_t* loop,
         options->stdio[1].data.stream->type != UV_NAMED_PIPE ||
         options->stdio[2].flags != UV_IGNORE)
       return UV_EINVAL;
+    if (options->pty_rows == 0 |
+        options->pty_cols == 0)
+      return UV_EINVAL;
   }
 
   assert(options->file != NULL);

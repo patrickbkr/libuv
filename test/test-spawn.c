@@ -2131,8 +2131,8 @@ TEST_IMPL(spawn_pty_setup_succeeds) {
 
   init_process_options("spawn_helper10", exit_cb);
 
-  uv_pipe_init(uv_default_loop(), &out, 0);
   uv_pipe_init(uv_default_loop(), &in, 0);
+  uv_pipe_init(uv_default_loop(), &out, 0);
 
   options.flags |= UV_PROCESS_PTY;
   options.stdio = stdio;
@@ -2141,6 +2141,8 @@ TEST_IMPL(spawn_pty_setup_succeeds) {
   options.stdio[1].flags = UV_CREATE_PIPE | UV_WRITABLE_PIPE;
   options.stdio[1].data.stream = (uv_stream_t*) &out;
   options.stdio[2].flags = UV_IGNORE;
+  options.pty_cols = 72;
+  options.pty_rows = 24;
   options.stdio_count = 3;
 
   r = uv_spawn(uv_default_loop(), &process, &options);
